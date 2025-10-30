@@ -1,121 +1,120 @@
 ﻿using System.Collections;
 using UnityEngine;
-using static System.Runtime.CompilerServices.RuntimeHelpers;
+using UnityEngine.UI;
 
 public class NewBehaviourScript : MonoBehaviour
 {
-    private CharacterController controller;
-    private Vector3 direction;
-    public float forwardSpeed = 10f;
-
-    private int desiredLane = 1;
-    public float laneDistance = 4;
-
-    public float jumpForce;
-    public float gravity = -20;
-
+    [Header("Slide Settings")]
+    public float slideHeight = 1.0f;
+    public float slideCenterY = 0.5f;
+    public float slideDuration = 0.5f;
+    public float slideSpeedMultiplier = 1.5f;
+    private float originalHeight;
+    private Vector3 originalCenter;
+    private bool isSliding = false;
 
    
-    public float maxSpeed;
 
+    private CharacterController controller;
+    private Vector3 direction;
+    public float forwardSpeed = 10f; 
+    public float jumpForce = 10f;
+    public float gravity = -20f;
+    public float followSpeed = 10f;
+    public float limitX = 3f;
     public Animator animator;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
+
+        originalHeight = controller.height;
+        originalCenter = controller.center;
+
+        
     }
 
     void Update()
     {
-
         if (!playerManager.isGameStarted)
             return;
-        // Increase forward speed over time
-        if (forwardSpeed < maxSpeed)
-            forwardSpeed += 0.1f * Time.deltaTime;
 
-
-
+        playerManager.currentScore = (int)transform.position.z;
         animator.SetBool("isGameStart", true);
-        direction.z = forwardSpeed;
 
-        animator.SetBool("isGrounded", controller.isGrounded);
-
-
+        
 
         if (controller.isGrounded)
         {
             if (direction.y < 0)
                 direction.y = -1;
 
-            if (Input.GetKeyDown(KeyCode.UpArrow))
+           
+            if (Input.GetMouseButtonDown(0))
             {
                 Jump();
             }
-
+         
+            else if (Input.GetMouseButtonDown(1) && !isSliding)
+            {
+                StartCoroutine(Slide());
+            }
         }
         else
         {
             direction.y += gravity * Time.deltaTime;
         }
 
-        if (Input.GetKeyDown(KeyCode.DownArrow))
-        {
-            StartCoroutine(Slide());
-        }
+       
+        Vector3 mousePos = Input.mousePosition;
+        mousePos.z = Camera.main.WorldToScreenPoint(transform.position).z;
+        Vector3 worldPos = Camera.main.ScreenToWorldPoint(mousePos);
 
+        float targetX = Mathf.Clamp(worldPos.x, -limitX, limitX);
+        float horizontalSpeed = (targetX - transform.position.x) * followSpeed;
 
+        float currentForwardSpeed = isSliding ? forwardSpeed * slideSpeedMultiplier : forwardSpeed;
 
-        if (Input.GetKeyDown(KeyCode.RightArrow))
-        {
-            desiredLane++;
-            if (desiredLane > 2)
-                desiredLane = 2;
-        }
+     
+        Vector3 moveVector = new Vector3(horizontalSpeed, direction.y, currentForwardSpeed);
 
-        if (Input.GetKeyDown(KeyCode.LeftArrow))
-        {
-            desiredLane--;
-            if (desiredLane < 0)
-                desiredLane = 0;
-        }
-
-
-        Vector3 targetPosition = transform.position.z * Vector3.forward + transform.position.y * Vector3.up;
-
-        if (desiredLane == 0)
-            targetPosition += Vector3.left * laneDistance;
-        else if (desiredLane == 2)
-            targetPosition += Vector3.right * laneDistance;
-
-
-        Vector3 moveDir = targetPosition - transform.position;
-        moveDir.y = 0;
-        controller.Move(moveDir * 10 * Time.deltaTime + direction * Time.deltaTime);
+        
+        controller.Move(moveVector * Time.deltaTime);
     }
 
     private void Jump()
     {
         direction.y = jumpForce;
-    }
-
-    private void OnControllerColliderHit(ControllerColliderHit hit)
-    {
-        if (hit.transform.tag == "Obstacle")
-        {
-            playerManager.gameover = true;
-           FindObjectOfType<AudioManager>().PlaySound("Gameover");
-        }
-
+        animator.SetTrigger("Jump");
     }
 
     private IEnumerator Slide()
     {
-        animator.SetBool("isSlide", true);
-        controller.center = new Vector3(0, -0.5f,0);
-        controller.height = 1f;
-        yield return new WaitForSeconds(1.3f);
-        controller.height = 2;
-        animator.SetBool("isSlide", false);
+        isSliding = true;
+
+        animator.SetBool("isSliding", true);
+
+ 
+        controller.height = slideHeight;
+        controller.center = new Vector3(originalCenter.x, slideCenterY, originalCenter.z);
+
+        yield return new WaitForSeconds(slideDuration);
+
+        controller.height = originalHeight;
+        controller.center = originalCenter;
+
+        animator.SetBool("isSliding", false);
+        isSliding = false;
+    }
+
+ 
+
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        if (hit.transform.CompareTag("Obstacle"))
+        {
+            playerManager.gameover = true;
+            FindObjectOfType<AudioManager>().PlaySound("Gameover");
+        }
     }
 }
